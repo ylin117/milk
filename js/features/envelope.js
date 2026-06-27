@@ -28,29 +28,51 @@ async function checkEnvelopeStatus() {
     await loadEnvelopeData();
     const now = Date.now();
     let changed = false;
-    let newReplyLetter = null;
+    let newLetter = null;  // 改为通用变量，可能是回信或主动来信
+
     envelopeData.outbox.forEach(letter => {
         if (letter.status === 'pending' && now >= letter.replyTime) {
-            letter.status = 'replied';
-            const replyContent = generateEnvelopeReplyText();
-            const replyId = 'reply_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
-            const inboxLetter = {
-                id: replyId,
-                refId: letter.id,
-                originalContent: letter.content,
-                content: replyContent,
-                receivedTime: Date.now(),
-                isNew: true
-            };
-            envelopeData.inbox.push(inboxLetter);
-            newReplyLetter = inboxLetter;
-            changed = true;
-            playSound('message');
+            letter.status = 'replied';  // 状态改为已处理
+
+            // 判断是“主动来信”还是“普通回信”
+            if (letter.isIncoming) {
+                // ---- 主动来信 ----
+                const content = generateEnvelopeReplyText(); // 复用回信生成逻辑（内容风格一致）
+                const newId = 'incoming_received_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                const inboxLetter = {
+                    id: newId,
+                    content: content,
+                    receivedTime: Date.now(),
+                    isNew: true,
+                    isIncoming: true   // 保留标记，便于 UI 区分（可选）
+                };
+                envelopeData.inbox.push(inboxLetter);
+                newLetter = inboxLetter;
+                changed = true;
+                playSound('message');
+            } else {
+                // ---- 普通回信（原有逻辑） ----
+                const replyContent = generateEnvelopeReplyText();
+                const replyId = 'reply_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+                const inboxLetter = {
+                    id: replyId,
+                    refId: letter.id,
+                    originalContent: letter.content,
+                    content: replyContent,
+                    receivedTime: Date.now(),
+                    isNew: true
+                };
+                envelopeData.inbox.push(inboxLetter);
+                newLetter = inboxLetter;
+                changed = true;
+                playSound('message');
+            }
         }
     });
+
     if (changed) {
         saveEnvelopeData();
-        if (newReplyLetter) showEnvelopeReplyPopup(newReplyLetter);
+        if (newLetter) showEnvelopeReplyPopup(newLetter); // 弹出通知（复用现有弹窗）
     }
 }
 
@@ -139,97 +161,44 @@ function generateEnvelopeReplyText() {
     return replyContent;
 }
 
-// ==========================================
-// 新增：对方主动来信功能（插入开始）
-// ==========================================
-
-/**
- * 生成一封「对方主动寄来的信」
- * 直接写入 inbox，内容复用原有的回信词库 (customReplies)
- */
+// 对方主动来信（延迟 6~48 小时后送达）
 window.generateIncomingLetter = function() {
-    // 复用原有的回信生成逻辑，获取一段随机文本（8~12句）
-    const content = generateEnvelopeReplyText();
+    // 确保数据已加载
+    if (!window.envelopeData) {
+        window.envelopeData = { outbox: [], inbox: [] };
+    }
 
-    const newLetter = {
-        id: 'incoming_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        content: content,
-        receivedTime: Date.now(),
-        isNew: true,
-        isIncoming: true   // 标记为主动来信（可选）
-    };
+    // 随机延迟时间：6~48 小时（单位：毫秒）
+    const minHours = 6;
+    const maxHours = 48;
+    const randomHours = Math.random() * (maxHours - minHours) + minHours;
+    const replyTime = Date.now() + randomHours * 60 * 60 * 1000;
 
-    // 存入收件箱
-    envelopeData.inbox.push(newLetter);
+    // 在 outbox 中创建一条“主动来信”的待处理记录（和普通写信格式一致，但加一个标记）
+    const newId = 'incoming_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    window.envelopeData.outbox.push({
+        id: newId,
+        content: '（对方主动来信，待生成）', // 占位内容，不会展示给用户
+        sentTime: Date.now(),
+        replyTime: replyTime,
+        status: 'pending',
+        isIncoming: true   // 标记为“主动来信”，以便在 checkEnvelopeStatus 中区分
+    });
+
     saveEnvelopeData();
     renderEnvelopeLists();
+
+    // 显示一个“已安排”的通知（而不是立即收到信）
+    const hours = Math.floor(randomHours);
+    const minutes = Math.round((randomHours - hours) * 60);
+    showNotification(
+        `📨 对方将在约 ${hours} 小时 ${minutes} 分钟后寄来一封信，请耐心等待~`,
+        'info'
+    );
+
+    // 播放提示音（可选）
     playSound('message');
-
-    // 显示弹窗提示
-    showIncomingLetterPopup(newLetter);
-
-    // 更新入口处的未读徽章
-    const badge = document.getElementById('env-entry-badge');
-    if (badge) {
-        const newCount = envelopeData.inbox.filter(l => l.isNew).length;
-        badge.style.display = newCount > 0 ? 'inline-block' : 'none';
-    }
 };
-
-/**
- * 显示"对方主动来信"的弹出通知（样式完全复用原有回信弹窗）
- */
-function showIncomingLetterPopup(letter) {
-    // 移除已存在的弹窗
-    const existing = document.getElementById('envelope-reply-popup');
-    if (existing) existing.remove();
-
-    const popup = document.createElement('div');
-    popup.id = 'envelope-reply-popup';
-    popup.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--secondary-bg);border:1px solid var(--border-color);border-radius:20px;padding:18px 20px;z-index:8000;max-width:320px;width:88%;box-shadow:0 8px 32px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:12px;animation:slideUpNotif 0.4s cubic-bezier(0.22,1,0.36,1);';
-    popup.innerHTML = `
-        <style>@keyframes slideUpNotif{from{opacity:0;transform:translateX(-50%) translateY(24px) scale(0.9)}60%{transform:translateX(-50%) translateY(-4px) scale(1.02)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}</style>
-        <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:26px;">💌</span>
-            <div>
-                <div style="font-size:14px;font-weight:700;color:var(--text-primary);">对方寄来了一封信 ✨</div>
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;opacity:0.8;">没有缘由，只是想你了~</div>
-            </div>
-        </div>
-        <div style="display:flex;gap:8px;">
-            <button onclick="document.getElementById('envelope-reply-popup').remove();" style="flex:1;padding:8px 0;border-radius:12px;border:1px solid var(--border-color);background:var(--primary-bg);color:var(--text-secondary);font-size:13px;cursor:pointer;">稍后查看</button>
-            <button onclick="openEnvelopeAndViewIncoming('${letter.id}');" style="flex:2;padding:8px 0;border-radius:12px;border:none;background:var(--accent-color);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">立即阅读 ✉</button>
-        </div>`;
-    document.body.appendChild(popup);
-
-    // 8秒后自动消失
-    setTimeout(() => {
-        if (popup.parentNode) popup.remove();
-    }, 8000);
-}
-
-/**
- * 点击弹窗按钮后，打开信封并定位到主动来信
- */
-window.openEnvelopeAndViewIncoming = function(letterId) {
-    // 移除弹窗
-    const popup = document.getElementById('envelope-reply-popup');
-    if (popup) popup.remove();
-
-    // 打开信封模态框
-    const envelopeModal = document.getElementById('envelope-modal');
-    showModal(envelopeModal);
-
-    // 切换到收件箱，并打开该信件
-    setTimeout(() => {
-        switchEnvTab('inbox');
-        viewEnvLetter('inbox', letterId);
-    }, 200);
-};
-
-// ==========================================
-// 新增代码结束
-// ==========================================
 
 window.switchEnvTab = function(tab) {
     currentEnvTab = tab;
