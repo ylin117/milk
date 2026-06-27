@@ -204,8 +204,24 @@ window.switchEnvTab = function(tab) {
     currentEnvTab = tab;
     document.getElementById('env-tab-outbox').classList.toggle('active', tab === 'outbox');
     document.getElementById('env-tab-inbox').classList.toggle('active', tab === 'inbox');
-    document.getElementById('env-outbox-section').style.display = tab === 'outbox' ? 'block' : 'none';
-    document.getElementById('env-inbox-section').style.display = tab === 'inbox' ? 'block' : 'none';
+    
+    // ===== 强制设置显示状态（使用 !important 覆盖任何冲突） =====
+    const outboxSection = document.getElementById('env-outbox-section');
+    const inboxSection = document.getElementById('env-inbox-section');
+    
+    if (tab === 'outbox') {
+        outboxSection.style.setProperty('display', 'block', 'important');
+        inboxSection.style.setProperty('display', 'none', 'important');
+    } else {
+        outboxSection.style.setProperty('display', 'none', 'important');
+        inboxSection.style.setProperty('display', 'block', 'important');
+        // 同时确保收件箱容器有高度
+        inboxSection.style.setProperty('height', 'auto', 'important');
+        inboxSection.style.setProperty('min-height', '200px', 'important');
+        inboxSection.style.setProperty('overflow', 'visible', 'important');
+    }
+    // ============================================================
+
     document.getElementById('env-compose-form').style.display = 'none';
     document.getElementById('env-main-close-btn').style.display = 'flex';
     renderEnvelopeLists();
