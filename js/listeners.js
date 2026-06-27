@@ -1347,6 +1347,28 @@ autoSendSlider.addEventListener('change', () => {
 const _sendEnvEl = document.getElementById('send-envelope');
 if (_sendEnvEl) _sendEnvEl.addEventListener('click', handleSendEnvelope);
 
+            // ----- 对方主动来信按钮 -----
+const incomingBtn = document.getElementById('btn-incoming-letter');
+if (incomingBtn) {
+    incomingBtn.addEventListener('click', function(e) {
+        e.stopPropagation(); // 防止意外冒泡
+        // 调用我们在 envelope.js 中定义的全局函数
+        if (typeof window.generateIncomingLetter === 'function') {
+            window.generateIncomingLetter();
+        } else {
+            console.warn('generateIncomingLetter 未定义，请检查 envelope.js 是否已加载');
+            showNotification('功能未加载，请刷新页面重试', 'warning');
+        }
+    });
+
+    // 增加一个小悬停效果（可选）
+    incomingBtn.addEventListener('mouseenter', function() {
+        this.style.transform = 'scale(1.04)';
+    });
+    incomingBtn.addEventListener('mouseleave', function() {
+        this.style.transform = 'scale(1)';
+    });
+}
 const _cancelEnvEl = document.getElementById('cancel-envelope');
 if (_cancelEnvEl) _cancelEnvEl.addEventListener('click', () => {
     hideModal(document.getElementById('envelope-modal'));
