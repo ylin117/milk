@@ -300,6 +300,33 @@ function renderOutboxList() {
 function renderInboxList() {
     const list = document.getElementById('env-inbox-list');
     if (!list) return;
+    
+    // ---------- 新增：自动创建“对方主动来信”按钮（如果不存在） ----------
+let btnContainer = document.getElementById('incoming-btn-container');
+if (!btnContainer) {
+    btnContainer = document.createElement('div');
+    btnContainer.id = 'incoming-btn-container';
+    btnContainer.style.cssText = 'display:flex; justify-content:flex-end; margin-bottom:10px;';
+    btnContainer.innerHTML = `
+        <button id="btn-incoming-letter" class="env-write-btn" style="font-size:13px;padding:6px 18px;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(245,87,108,0.3);transition:transform 0.15s;">
+            💌 对方主动来信
+        </button>
+    `;
+    // 插入到 list 之前（即容器的开头）
+    list.parentNode.insertBefore(btnContainer, list);
+    // 绑定事件（只绑定一次）
+    const btn = btnContainer.querySelector('#btn-incoming-letter');
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (typeof window.generateIncomingLetter === 'function') {
+            window.generateIncomingLetter();
+        } else {
+            console.warn('generateIncomingLetter 未定义');
+        }
+    });
+}
+// ---------- 新增结束 ----------
+    
     if (envelopeData.inbox.length === 0) {
         list.innerHTML = `<div class="env-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/><polyline points="22 13 12 13"/><path d="M19 16l-5-3-5 3"/></svg>
